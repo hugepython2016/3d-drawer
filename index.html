@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>3D 空间线条绘画工具</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <canvas id="canvas3D"></canvas>
+
+  <!-- 工具栏 -->
+  <div id="toolbar" class="toolbar-3d">
+    <div class="tool-group">
+      <button id="btn-mode" class="tool-btn active" data-mode="edit" title="切换编辑 / 预览">编辑模式</button>
+    </div>
+    <div class="tool-divider"></div>
+    <div class="tool-group">
+      <button id="btn-freehand" class="tool-btn active" data-mode="freehand">随手画</button>
+      <button id="btn-straight" class="tool-btn" data-mode="straight">直线</button>
+      <button id="btn-curve" class="tool-btn" data-mode="curve">曲线</button>
+    </div>
+    <div class="tool-divider"></div>
+    <div class="tool-group">
+      <button id="btn-brush" class="tool-btn" data-mode="brush">笔刷</button>
+    </div>
+    <div class="tool-divider"></div>
+    <div class="tool-group">
+      <div class="color-swatches" id="color-swatches"></div>
+      <input type="color" id="color-picker" class="color-picker-input" value="#6366f1">
+    </div>
+    <div class="tool-divider"></div>
+    <div class="tool-group slider-group">
+      <label class="slider-label">线宽<span id="lw-val" class="slider-val">3</span></label>
+      <input id="line-width" type="range" min="1" max="20" step="1" value="3" class="tool-slider" title="线条粗细（像素）">
+    </div>
+    <div class="tool-divider"></div>
+    <div class="tool-group slider-group">
+      <label class="slider-label">球径<span id="br-val" class="slider-val">0.25</span></label>
+      <input id="ball-radius" type="range" min="0.05" max="0.6" step="0.01" value="0.25" class="tool-slider" title="圆球大小（半径）">
+    </div>
+    <div class="tool-divider"></div>
+    <div class="tool-group">
+      <button id="btn-undo" class="tool-btn" title="撤销 (Ctrl+Z)" disabled>撤销</button>
+      <button id="btn-redo" class="tool-btn" title="重做 (Ctrl+Y)" disabled>重做</button>
+      <button id="btn-clear-all" class="tool-btn danger" title="清空全部线条">清空</button>
+    </div>
+    <div class="tool-divider"></div>
+    <div class="tool-group">
+      <button id="btn-export" class="tool-btn" title="导出场景 JSON">导出</button>
+      <button id="btn-import" class="tool-btn" title="导入场景 JSON">导入</button>
+      <input type="file" id="import-file" accept="application/json,.json" style="display:none;">
+    </div>
+  </div>
+
+  <!-- 测量读数（选中线条 / 绘制中显示） -->
+  <div id="measure-readout" class="measure-readout" style="display:none;"></div>
+
+  <!-- 平面切换栏：选中辅助多边体后出现 -->
+  <div id="plane-bar" class="plane-bar" style="display:none;">
+    <button id="btn-plane-left" class="plane-btn" title="逆时针切换到上一个顶点所在平面">◀ 上一交点</button>
+    <button id="btn-plane-mid" class="plane-btn plane-btn-main" title="锁定 / 解锁 当前平面（绿色坐标轴与顶点决定的平面）">● 锁定平面</button>
+    <button id="btn-plane-right" class="plane-btn" title="顺时针切换到下一个顶点所在平面">▶ 下一交点</button>
+  </div>
+
+  <!-- 独立平面模式栏：编辑模式下常驻，切换自由/锁定平面 -->
+  <div id="plane-mode-bar" class="plane-mode-bar">
+    <span class="pm-label">平面</span>
+    <button id="pm-camera" class="pm-btn active" title="自由绘制：投影到正对相机的平面（默认）">镜头面</button>
+    <button id="pm-horizontal" class="pm-btn" title="自由绘制：投影到水平面（真实3D水平笔触，旋转相机可叠层）">水平面</button>
+    <button id="pm-ground" class="pm-btn" title="锁定到地面网格平面 (y=-3)">地面</button>
+    <button id="pm-3point" class="pm-btn" title="依次点击 3 个端点圆球定义任意平面（含倾斜面）">3点定面</button>
+    <button id="pm-unlock" class="pm-btn pm-btn-unlock" title="解除平面锁定，恢复自由绘制" disabled>解锁</button>
+  </div>
+
+  <!-- 统一底部提示栏 -->
+  <div id="hint-bar">
+    <div id="hint-message">左键拖拽绘制 | 滚轮缩放 | 右键旋转 | 中键拖拽平移 | <span class="key">双击空白</span> 生成圆点 | <span class="key">Shift+双击</span> 生成圆球 | <span class="key">Alt+拖拽圆点</span> 移动(连线跟随) | <span class="key">右键圆点/圆球</span> 删除 | <span class="key">Ctrl+Z</span> 撤销 | <span class="key">Ctrl+点击圆球</span> 多选 | <span class="key">双击圆球</span> 聚焦 | <span class="key">Delete</span> 删除/清面 | <span class="key">右键Y轴</span> 多边形 | <span class="key">E/P</span> 编辑预览 | <span class="key">Esc</span> 取消</div>
+    <div id="hint-coords">坐标: (0, 0, 0)</div>
+  </div>
+
+  <!-- 多边形参数输入弹窗 -->
+  <div id="polygonModal" class="modal-overlay" style="display:none;">
+    <div class="modal-box">
+      <div class="modal-title">生成辅助多边形</div>
+      <div class="modal-body">
+        <div class="modal-row">
+          <label for="polygonRadius">半径（中心到顶点距离）：</label>
+          <input type="number" id="polygonRadius" min="0.2" max="20" value="1" step="0.1">
+        </div>
+        <div class="modal-row">
+          <label for="polygonSides">边数（2=直线 / 3~32）：</label>
+          <input type="number" id="polygonSides" min="2" max="32" value="4" step="1">
+        </div>
+        <div class="modal-buttons">
+          <button id="polygonConfirm">确认生成</button>
+          <button id="polygonCancel">取消</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="importmap">
+    {
+      "imports": {
+        "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+        "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+      }
+    }
+  </script>
+
+  <script type="module" src="js/main.js?v=26"></script>
+</body>
+</html>
